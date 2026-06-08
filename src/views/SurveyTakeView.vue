@@ -37,6 +37,10 @@ function computeVisible() {
   const result = []
   const seen = new Set()
 
+  function toIds(v) {
+    return v == null ? [] : Array.isArray(v) ? v : [v]
+  }
+
   function walk(questionIds) {
     for (const qid of questionIds) {
       if (seen.has(qid)) continue
@@ -46,9 +50,9 @@ function computeVisible() {
       result.push(q)
       if (!q.branching || Object.keys(q.branching).length === 0) continue
       const answer = answers[qid]
-      const target = q.branching[answer]
-      if (target && target.length) {
-        walk(target)
+      const ids = toIds(q.branching[answer])
+      if (ids.length) {
+        walk(ids)
       }
     }
   }
@@ -56,7 +60,7 @@ function computeVisible() {
   const firstIds = survey.questions.filter(q => {
     return !survey.questions.some(other => {
       if (!other.branching) return false
-      return Object.values(other.branching).some(branchIds => branchIds && branchIds.includes(q.id))
+      return Object.values(other.branching).some(branchIds => toIds(branchIds).includes(q.id))
     })
   }).map(q => q.id)
 
