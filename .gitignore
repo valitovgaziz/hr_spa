@@ -8,9 +8,9 @@ dist/
 build/
 
 # Environment files
-.env
-.env.local
-.env.*.local
+# .env
+# .env.local
+# .env.*.local
 
 # IDE / Editor
 .vscode/
