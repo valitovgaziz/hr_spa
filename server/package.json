@@ -1,0 +1,19 @@
+{
+  "name": "pulsehr-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "db:init": "node db/init.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "pg": "^8.13.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.0",
+    "jsonwebtoken": "^9.0.0",
+    "uuid": "^10.0.0"
+  }
+}

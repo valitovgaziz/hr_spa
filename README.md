@@ -1,102 +1,187 @@
 # PulseHR — Корпоративный сервис опросов сотрудников
 
-SPA на Vue 3 для проведения pulse-опросов, eNPS-аналитики и каскадных уведомлений (Web Push → Telegram → SMS → Email). REST API замокан на клиенте.
+SPA на Vue 3 + REST API на Node.js/Express + PostgreSQL для проведения pulse-опросов, eNPS-аналитики и каскадных уведомлений (Web Push → Telegram → SMS → Email).
 
 ## Технологии
 
-- **Vue 3** (Composition API, `<script setup>`)
-- **Vue Router 4** (ленивая загрузка, guards по ролям)
-- **Pinia** (управление состоянием)
-- **Vite 5** (сборка, dev-сервер)
+| Слой | Стек |
+|---|---|
+| Frontend | Vue 3 (Composition API), Vue Router 4, Pinia, Vite 5 |
+| Backend | Node.js, Express, PostgreSQL (`pg`) |
+| API | REST over HTTP, JWT-аутентификация |
 
 ## Быстрый старт
 
 ```bash
 npm install
+```
+
+### Frontend (с замоканным API)
+
+Работает без бэкенда — данные берутся из `src/services/api.js` (режим mock).
+
+```bash
+npm run dev
+# http://localhost:3000
+```
+
+Если порт 3000 занят, Vite переключится на 3001/3002 автоматически.
+
+Собрать статику и открыть:
+
+```bash
+npm run build
+npm run serve   # http://localhost:8080
+```
+
+### Frontend + Backend (PostgreSQL)
+
+**1. Подготовить БД:**
+
+```bash
+createdb pulsehr
+```
+
+Или через psql:
+```sql
+CREATE DATABASE pulsehr;
+```
+
+**2. Настроить подключение** — `server/.env`:
+```
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=pulsehr
+DB_USER=postgres
+DB_PASSWORD=postgres
+```
+
+**3. Инициализировать схему и тестовые данные:**
+
+```bash
+cd server
+npm run db:init
+```
+
+**4. Запустить API (порт 4000):**
+
+```bash
+cd server
 npm run dev
 ```
 
-Откройте **http://localhost:3000**.
+**5. Переключить фронтенд на реальный API (опционально):**
 
-Если порт 3000 занят, Vite автоматически выберет другой (3001, 3002...).
+В `src/services/api.js` установить `USE_MOCK = false`.
 
 ## Скрипты
 
+### Frontend
+
 | Команда | Описание |
 |---|---|
-| `npm run dev` | Dev-сервер (Vite, HMR) |
-| `npm run build` | Production-сборка в `dist/` |
-| `npm run preview` | Просмотр `dist/` через Vite preview |
-| `npm run serve` | Просмотр `dist/` через http-server |
-| `npm run clean` | Очистка кэша Vite и `dist/` |
+| `npm run dev` | Vite dev-server (HMR) |
+| `npm run build` | Сборка в `dist/` |
+| `npm run preview` | Vite preview `dist/` |
+| `npm run serve` | http-server `dist/` на :8080 |
+| `npm run clean` | Очистка кэша Vite |
 
-### Если `npm run dev` не работает
+### Backend (`server/`)
 
-```bash
-# 1. Проверьте, не занят ли порт
-netstat -ano | findstr :3000
-
-# 2. Убейте процесс, занимающий порт (замените PID)
-taskkill /F /PID <PID>
-
-# 3. Или используйте готовую сборку
-npm run build
-npm run serve   # откроет http://localhost:8080
-```
+| Команда | Описание |
+|---|---|
+| `npm run dev` | API на :4000 с hot-reload |
+| `npm run start` | API на :4000 |
+| `npm run db:init` | Создать БД, таблицы, seed-данные |
 
 ## Тестовый вход
 
 | Телефон | Роль | Код OTP |
 |---|---|---|
 | `+7 999 123-45-67` | HR / Администратор | `111111` |
-| Любой другой номер | Сотрудник | `111111` |
+| Любой другой | Сотрудник | `111111` |
+
+## API Endpoints
+
+### Auth
+- `POST /api/auth/otp` — запрос OTP-кода
+- `POST /api/auth/verify` — проверка кода, выдача JWT
+- `GET /api/auth/me` — текущий пользователь
+
+### Surveys
+- `GET /api/surveys` — список опросов
+- `GET /api/surveys/:id` — опрос с вопросами
+- `POST /api/surveys` — создать (HR)
+- `PUT /api/surveys/:id` — обновить (HR)
+- `POST /api/surveys/:id/publish` — опубликовать (HR)
+
+### Answers
+- `POST /api/answers/:surveyId` — отправить ответы
+- `GET /api/answers/:surveyId/results` — результаты (HR)
+
+### Analytics
+- `GET /api/analytics` — eNPS, метрики, каналы (HR)
+
+### Notifications
+- `GET /api/notifications/settings` — настройки пользователя
+- `PUT /api/notifications/settings` — обновить настройки
+- `POST /api/notifications/telegram/link` — привязать Telegram
+- `POST /api/notifications/push/subscribe` — подписка Web Push
+- `DELETE /api/notifications/devices/:id` — отвязать устройство
 
 ## Структура проекта
 
 ```
-src/
-├── main.js                        # Entry point
-├── App.vue                        # Корневой компонент + навигация
-├── router/index.js                # 11 маршрутов + guard
-├── services/api.js                # Mock REST API
-├── stores/
-│   ├── auth.js                    # Авторизация (телефон + OTP)
-│   ├── survey.js                  # Опросы (CRUD, публикация)
-│   └── notifications.js           # Настройки уведомлений
-├── views/
-│   ├── LoginView.vue              # Вход по телефону
-│   ├── HrDashboardView.vue        # Дашборд HR
-│   ├── SurveyListView.vue         # Список опросов (HR)
-│   ├── SurveyConstructorView.vue  # Конструктор с ветвлением
-│   ├── EmployeeSurveysView.vue    # Доступные опросы (сотрудник)
-│   ├── SurveyTakeView.vue         # Прохождение опроса
-│   ├── AnalyticsView.vue          # Аналитика + eNPS
-│   ├── NotificationSettingsView.vue # Каскадные уведомления
-│   └── ProfileView.vue            # Профиль
-└── styles/main.css                # Глобальные стили
+├── src/                        # Frontend (Vue 3)
+│   ├── main.js
+│   ├── App.vue
+│   ├── router/index.js
+│   ├── services/api.js         # API-клиент + mock fallback
+│   ├── stores/                 # Pinia stores
+│   ├── views/                  # 9 страниц
+│   └── styles/main.css
+├── server/                     # Backend (Express + PG)
+│   ├── index.js                # Точка входа
+│   ├── db/
+│   │   ├── schema.sql          # DDL
+│   │   ├── pool.js             # Подключение к PG
+│   │   └── init.js             # Инициализация БД
+│   ├── middleware/auth.js      # JWT guard
+│   └── routes/
+│       ├── auth.js
+│       ├── surveys.js
+│       ├── answers.js
+│       ├── analytics.js
+│       └── notifications.js
+└── README.md
 ```
 
 ## Функционал MVP
 
-- **Авторизация**: номер телефона → OTP-код, разделение ролей HR/Сотрудник
-- **Конструктор опросов**: 5 типов вопросов (одиночный/множественный выбор, шкала/NPS, текст, матрица), анонимный/идентифицированный режим
-- **Ветвление (conditional logic)**: показ разных вопросов в зависимости от ответов
-- **Прохождение**: анонимная плашка, eNPS (0–10), динамические вопросы по ветвлению
-- **Каскадные уведомления**: Web Push → Telegram → SMS → Email, настройки каналов, «Не беспокоить»
-- **Дашборд HR**: eNPS, метрики прохождения, эффективность каналов
-- **Аналитика**: eNPS по подразделениям, график активности, sentiment комментариев
+- **Авторизация**: телефон → OTP, разделение ролей HR/Сотрудник
+- **Конструктор опросов**: 5 типов вопросов, анонимный/идентифицированный режим
+- **Ветвление (conditional logic)**: динамические вопросы от ответов
+- **Прохождение**: анонимная плашка, eNPS (0–10), матрица, ветвление
+- **Каскадные уведомления**: Web Push → Telegram → SMS → Email
+- **Дашборд HR**: eNPS, метрики, каналы, подразделения
+- **Аналитика**: eNPS по отделам, график, sentiment комментариев
 
-## Mock API
+## База данных (PostgreSQL)
 
-Все эндпоинты находятся в `src/services/api.js`. Симулируют задержку сети (300–800 мс) и редкие ошибки (5%). Ключевые методы:
+```
+users          → телефон, роль, подразделение, настройки
+otp_codes      → OTP-коды для входа
+sessions       → JWT-токены
+surveys        → опросы (статусы: draft/active/completed/archived)
+survey_questions → вопросы с поддержкой branching JSON
+survey_targets → целевые роли
+survey_responses → ответы на опрос
+survey_answers → ответы на вопросы
+user_devices   → устройства для Web Push
+```
 
-- `api.requestOtp(phone)` — запрос OTP-кода
-- `api.verifyOtp(phone, code)` — проверка кода (тестовый: 111111)
-- `api.fetchSurveys()` / `api.fetchSurvey(id)` — получение опросов
-- `api.createSurvey(data)` / `api.publishSurvey(id)` — создание/публикация
-- `api.submitSurveyResponse(id, answers)` — отправка ответов
-- `api.fetchAnalytics()` — получение аналитики
+Пул подключений — `pg.Pool` (max 20 соединений, таймаут 5 с).
 
-## Разработчик
+---
 
 PulseHR — Хакатон 2026. ООО «СКС Ломбард».
