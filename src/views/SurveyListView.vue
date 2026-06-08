@@ -84,10 +84,10 @@ function getStatuses() {
           <span style="margin-left:16px;">{{ s.anonymous ? '🔒 Анонимный' : '🔓 Идентифицированный' }}</span>
         </div>
         <div style="margin-top:12px;">
-          <span v-for="q in s.questions.slice(0, 3)" :key="q.id" class="badge" style="margin-right:6px;margin-bottom:4px;">
+          <span v-for="q in (s.questions || []).slice(0, 3)" :key="q.id" class="badge" style="margin-right:6px;margin-bottom:4px;">
             {{ q.type === 'single' ? 'Одиночный' : q.type === 'multiple' ? 'Множественный' : q.type === 'scale' ? 'Шкала' : q.type === 'text' ? 'Текст' : 'Матрица' }}
           </span>
-          <span v-if="s.questions.length > 3" class="badge" style="background:#E2E8F0;">+{{ s.questions.length - 3 }}</span>
+          <span v-if="(s.questions || []).length > 3" class="badge" style="background:#E2E8F0;">+{{ (s.questions || []).length - 3 }}</span>
         </div>
       </div>
     </div>
