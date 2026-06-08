@@ -52,7 +52,7 @@ const available = computed(() =>
         </div>
         <p v-if="s.description" style="color:#6B7280;font-size:14px;margin:8px 0;">{{ s.description }}</p>
         <div style="font-size:13px;color:#6B7280;margin-top:12px;">
-          ⏳ до {{ s.endDate }} • {{ s.questions.length }} вопросов • ~{{ s.questions.length * 0.7 }} мин
+          ⏳ до {{ s.endDate }} • {{ (s.questions || []).length }} вопросов • ~{{ (s.questions || []).length * 0.7 }} мин
         </div>
         <div style="margin-top:16px;">
           <div v-if="s.anonymous" class="alert alert-info" style="margin:0;">

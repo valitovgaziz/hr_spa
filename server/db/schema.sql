@@ -105,6 +105,20 @@ CREATE TABLE IF NOT EXISTS survey_answers (
   value TEXT
 );
 
+-- Таблица дедупликации (не нарушает анонимность survey_responses)
+CREATE TABLE IF NOT EXISTS survey_completions (
+  id SERIAL PRIMARY KEY,
+  survey_id INTEGER NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(survey_id, user_id)
+);
+
+-- Перенос уже существующих завершённых опросов (если есть user_id)
+INSERT INTO survey_completions (survey_id, user_id, completed_at)
+SELECT survey_id, user_id, submitted_at FROM survey_responses WHERE user_id IS NOT NULL
+ON CONFLICT DO NOTHING;
+
 -- Индексы
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
@@ -118,3 +132,13 @@ CREATE INDEX IF NOT EXISTS idx_otp_phone ON otp_codes(phone);
 -- Миграции для уже существующих таблиц
 ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_enabled BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email_enabled BOOLEAN NOT NULL DEFAULT true;
+CREATE TABLE IF NOT EXISTS survey_completions (
+  id SERIAL PRIMARY KEY,
+  survey_id INTEGER NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(survey_id, user_id)
+);
+INSERT INTO survey_completions (survey_id, user_id, completed_at)
+SELECT survey_id, user_id, submitted_at FROM survey_responses WHERE user_id IS NOT NULL
+ON CONFLICT DO NOTHING;

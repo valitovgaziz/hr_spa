@@ -12,9 +12,9 @@ router.post('/:surveyId', authMiddleware, async (req, res) => {
     const { answers } = req.body // { questionId: value, ... }
     const surveyId = parseInt(req.params.surveyId)
 
-    // Проверяем, не проходил ли уже
+    // Проверяем, не проходил ли уже (отдельная таблица для анонимных опросов)
     const existing = await client.query(
-      `SELECT id FROM survey_responses WHERE survey_id = $1 AND user_id = $2`,
+      `SELECT id FROM survey_completions WHERE survey_id = $1 AND user_id = $2`,
       [surveyId, req.user.id]
     )
     if (existing.rowCount > 0) {
@@ -54,6 +54,11 @@ router.post('/:surveyId', authMiddleware, async (req, res) => {
         [responseId, parseInt(questionId), val]
       )
     }
+
+    await client.query(
+      'INSERT INTO survey_completions (survey_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [surveyId, req.user.id]
+    )
 
     await client.query('COMMIT')
     res.json({ success: true, message: 'Спасибо, ответы сохранены!' })
