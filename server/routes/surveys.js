@@ -98,18 +98,33 @@ router.post('/', authMiddleware, hrOnly, async (req, res) => {
       }
     }
 
+    const idMap = {}
     if (questions?.length) {
       for (let i = 0; i < questions.length; i++) {
         const q = questions[i]
-        await client.query(
+        const ins = await client.query(
           `INSERT INTO survey_questions (survey_id, type, title, required, sort_order, options, scale_min, scale_max, rows, columns, branching)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
           [surveyId, q.type, q.title, q.required ?? true, i,
            JSON.stringify(q.options) || null,
            q.scaleMin || null, q.scaleMax || null,
            JSON.stringify(q.rows) || null,
            JSON.stringify(q.columns) || null,
            JSON.stringify(q.branching) || null]
+        )
+        idMap[q.id] = ins.rows[0].id
+      }
+      // перемаппинг branching: фронтовые Date.now() ID → реальные SERIAL ID
+      for (let i = 0; i < questions.length; i++) {
+        const q = questions[i]
+        if (!q.branching || Object.keys(q.branching).length === 0) continue
+        const remapped = {}
+        for (const [key, val] of Object.entries(q.branching)) {
+          remapped[key] = idMap[val] || val
+        }
+        await client.query(
+          'UPDATE survey_questions SET branching = $1 WHERE id = $2',
+          [JSON.stringify(remapped), idMap[q.id]]
         )
       }
     }
@@ -140,18 +155,33 @@ router.put('/:id', authMiddleware, hrOnly, async (req, res) => {
 
     await client.query('DELETE FROM survey_questions WHERE survey_id = $1', [req.params.id])
 
+    const idMap = {}
     if (questions?.length) {
       for (let i = 0; i < questions.length; i++) {
         const q = questions[i]
-        await client.query(
+        const ins = await client.query(
           `INSERT INTO survey_questions (survey_id, type, title, required, sort_order, options, scale_min, scale_max, rows, columns, branching)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
           [req.params.id, q.type, q.title, q.required ?? true, i,
            JSON.stringify(q.options) || null,
            q.scaleMin || null, q.scaleMax || null,
            JSON.stringify(q.rows) || null,
            JSON.stringify(q.columns) || null,
            JSON.stringify(q.branching) || null]
+        )
+        idMap[q.id] = ins.rows[0].id
+      }
+      // перемаппинг branching: фронтовые Date.now() ID → реальные SERIAL ID
+      for (let i = 0; i < questions.length; i++) {
+        const q = questions[i]
+        if (!q.branching || Object.keys(q.branching).length === 0) continue
+        const remapped = {}
+        for (const [key, val] of Object.entries(q.branching)) {
+          remapped[key] = idMap[val] || val
+        }
+        await client.query(
+          'UPDATE survey_questions SET branching = $1 WHERE id = $2',
+          [JSON.stringify(remapped), idMap[q.id]]
         )
       }
     }
