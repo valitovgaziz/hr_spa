@@ -6,10 +6,14 @@ const router = Router()
 const JWT_SECRET = process.env.JWT_SECRET || 'pulsehr-secret-key'
 const TEST_CODE = process.env.OTP_TEST_CODE || '111111'
 
+function normalizePhone(phone) {
+  return phone.replace(/[\s\-\(\)]/g, '')
+}
+
 // POST /api/auth/otp — запрос OTP-кода
 router.post('/otp', async (req, res) => {
   try {
-    const { phone } = req.body
+    const phone = normalizePhone(req.body.phone)
     if (!phone) return res.status(400).json({ error: 'Телефон обязателен' })
 
     const code = TEST_CODE // в продакшене — генерация + SMS
@@ -28,7 +32,8 @@ router.post('/otp', async (req, res) => {
 // POST /api/auth/verify — проверка OTP, выдача JWT
 router.post('/verify', async (req, res) => {
   try {
-    const { phone, code } = req.body
+    const phone = normalizePhone(req.body.phone)
+    const { code } = req.body
     if (!phone || !code) {
       return res.status(400).json({ error: 'Телефон и код обязательны' })
     }

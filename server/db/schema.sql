@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS users (
   quiet_start DATE,
   quiet_end DATE,
   preferred_time VARCHAR(20) NOT NULL DEFAULT '12:00-18:00',
+  sms_enabled BOOLEAN NOT NULL DEFAULT true,
+  email_enabled BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -112,3 +114,7 @@ CREATE INDEX IF NOT EXISTS idx_questions_survey ON survey_questions(survey_id);
 CREATE INDEX IF NOT EXISTS idx_responses_survey ON survey_responses(survey_id);
 CREATE INDEX IF NOT EXISTS idx_answers_response ON survey_answers(response_id);
 CREATE INDEX IF NOT EXISTS idx_otp_phone ON otp_codes(phone);
+
+-- Миграции для уже существующих таблиц
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_enabled BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_enabled BOOLEAN NOT NULL DEFAULT true;

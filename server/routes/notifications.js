@@ -9,7 +9,8 @@ router.get('/settings', authMiddleware, async (req, res) => {
   try {
     const user = await pool.query(
       `SELECT push_enabled, telegram_linked, quiet_mode,
-              quiet_start, quiet_end, preferred_time
+               quiet_start, quiet_end, preferred_time,
+               sms_enabled, email_enabled
        FROM users WHERE id = $1`,
       [req.user.id]
     )
@@ -33,18 +34,31 @@ router.get('/settings', authMiddleware, async (req, res) => {
 // PUT /api/notifications/settings — обновить настройки
 router.put('/settings', authMiddleware, async (req, res) => {
   try {
-    const { pushEnabled, quietMode, quietStart, quietEnd, preferredTime } = req.body
+    const { pushEnabled, telegramLinked, quietMode, quietStart, quietEnd, preferredTime, smsEnabled, emailEnabled } = req.body
 
     await pool.query(
       `UPDATE users SET
-        push_enabled = $1, quiet_mode = $2,
-        quiet_start = $3, quiet_end = $4,
-        preferred_time = $5, updated_at = NOW()
-       WHERE id = $6`,
-      [pushEnabled, quietMode, quietStart || null, quietEnd || null, preferredTime, req.user.id]
+        push_enabled = COALESCE($1, push_enabled),
+        telegram_linked = COALESCE($2, telegram_linked),
+        quiet_mode = COALESCE($3, quiet_mode),
+        quiet_start = $4, quiet_end = $5,
+        preferred_time = COALESCE($6, preferred_time),
+        sms_enabled = COALESCE($7, sms_enabled),
+        email_enabled = COALESCE($8, email_enabled),
+        updated_at = NOW()
+       WHERE id = $9`,
+      [pushEnabled, telegramLinked, quietMode, quietStart || null, quietEnd || null, preferredTime, smsEnabled, emailEnabled, req.user.id]
     )
 
-    res.json({ success: true, message: 'Настройки сохранены' })
+    const updated = await pool.query(
+      `SELECT id, phone, name, role, department, position,
+              push_enabled, telegram_linked, quiet_mode,
+              quiet_start, quiet_end, preferred_time,
+              sms_enabled, email_enabled
+       FROM users WHERE id = $1`,
+      [req.user.id]
+    )
+    res.json(updated.rows[0])
   } catch (err) {
     console.error('[NOTIF] update settings error:', err)
     res.status(500).json({ error: 'Ошибка сервера' })

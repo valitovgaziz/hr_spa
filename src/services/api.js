@@ -6,6 +6,16 @@ export function setApiToken(token) {
   _token = token
 }
 
+function toCamel(row) {
+  if (!row || typeof row !== 'object') return row
+  if (Array.isArray(row)) return row.map(toCamel)
+  const result = {}
+  for (const [key, val] of Object.entries(row)) {
+    result[key.replace(/_([a-z])/g, (_, c) => c.toUpperCase())] = typeof val === 'object' && val !== null ? toCamel(val) : val
+  }
+  return result
+}
+
 async function request(path, options = {}) {
   const url = API_BASE + path
   const headers = { 'Content-Type': 'application/json', ...options.headers }
@@ -26,6 +36,18 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  async fetchMe() {
+    const data = await request('/auth/me')
+    return toCamel(data)
+  },
+
+  async updateProfile(data) {
+    return toCamel(await request('/auth/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }))
+  },
+
   async requestOtp(phone) {
     return request('/auth/otp', {
       method: 'POST',
@@ -69,6 +91,10 @@ export const api = {
     return request('/surveys/' + id + '/publish', { method: 'POST' })
   },
 
+  async deleteSurvey(id) {
+    return request('/surveys/' + id, { method: 'DELETE' })
+  },
+
   async submitSurveyResponse(surveyId, answers) {
     return request('/answers/' + surveyId, {
       method: 'POST',
@@ -81,14 +107,16 @@ export const api = {
   },
 
   async fetchNotifications() {
-    return request('/notifications/settings')
+    const data = await request('/notifications/settings')
+    return toCamel(data)
   },
 
   async updateNotificationSettings(settings) {
-    return request('/notifications/settings', {
+    const data = await request('/notifications/settings', {
       method: 'PUT',
       body: JSON.stringify(settings)
     })
+    return toCamel(data)
   },
 
   async linkTelegram() {
@@ -97,6 +125,10 @@ export const api = {
 
   async requestPushPermission() {
     return { granted: true }
+  },
+
+  async deleteDevice(id) {
+    return request('/notifications/devices/' + id, { method: 'DELETE' })
   },
 
   async fetchUsers() {
