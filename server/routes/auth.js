@@ -81,7 +81,8 @@ router.post('/verify', async (req, res) => {
         department: u.department,
         position: u.position,
         pushEnabled: u.push_enabled,
-        telegramLinked: u.telegram_linked
+        telegramLinked: u.telegram_linked,
+        consentGiven: u.consent_given
       }
     })
   } catch (err) {
@@ -101,12 +102,32 @@ router.get('/me', async (req, res) => {
     const result = await pool.query(
       `SELECT id, phone, name, role, department, position,
               push_enabled, telegram_linked, quiet_mode,
-              quiet_start, quiet_end, preferred_time
+              quiet_start, quiet_end, preferred_time,
+              consent_given, consent_at
        FROM users WHERE id = $1`,
       [decoded.userId]
     )
     if (result.rowCount === 0) return res.status(404).json({ error: 'Не найден' })
     res.json(result.rows[0])
+  } catch {
+    res.status(401).json({ error: 'Недействительный токен' })
+  }
+})
+
+// POST /api/auth/consent — согласие на обработку ПД (152-ФЗ)
+router.post('/consent', async (req, res) => {
+  const header = req.headers.authorization
+  if (!header || !header.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Не авторизован' })
+  }
+  try {
+    const decoded = jwt.verify(header.slice(7), JWT_SECRET)
+    await pool.query(
+      `UPDATE users SET consent_given = true, consent_at = NOW(), updated_at = NOW()
+       WHERE id = $1`,
+      [decoded.userId]
+    )
+    res.json({ success: true, message: 'Согласие принято' })
   } catch {
     res.status(401).json({ error: 'Недействительный токен' })
   }

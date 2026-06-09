@@ -106,6 +106,10 @@ export const api = {
     return request('/analytics')
   },
 
+  async fetchQuestionAnalytics(surveyId) {
+    return request('/analytics/questions/' + surveyId)
+  },
+
   async fetchNotifications() {
     const data = await request('/notifications/settings')
     return toCamel(data)
@@ -152,5 +156,9 @@ export const api = {
 
   async fetchUsers() {
     return request('/notifications/users')
+  },
+
+  async giveConsent() {
+    return request('/auth/consent', { method: 'POST' })
   }
 }

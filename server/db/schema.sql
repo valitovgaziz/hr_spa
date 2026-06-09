@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS users (
   preferred_time VARCHAR(20) NOT NULL DEFAULT '12:00-18:00',
   sms_enabled BOOLEAN NOT NULL DEFAULT true,
   email_enabled BOOLEAN NOT NULL DEFAULT true,
+  consent_given BOOLEAN NOT NULL DEFAULT false,
+  consent_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -161,6 +163,8 @@ CREATE INDEX IF NOT EXISTS idx_otp_phone ON otp_codes(phone);
 -- Миграции для уже существующих таблиц
 ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_enabled BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email_enabled BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_given BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_at TIMESTAMPTZ;
 CREATE TABLE IF NOT EXISTS survey_completions (
   id SERIAL PRIMARY KEY,
   survey_id INTEGER NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,

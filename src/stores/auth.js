@@ -10,6 +10,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => !!token.value)
   const isHR = computed(() => user.value?.role === 'hr')
   const roleLabel = computed(() => user.value?.role === 'hr' ? 'HR / Администратор' : 'Сотрудник')
+  const needsConsent = computed(() => isAuthenticated.value && !user.value?.consentGiven)
 
   async function requestOtp(phone) {
     loading.value = true
@@ -43,6 +44,14 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function giveConsent() {
+    await api.giveConsent()
+    if (user.value) {
+      user.value.consentGiven = true
+      localStorage.setItem('pulsehr_user', JSON.stringify(user.value))
+    }
+  }
+
   function logout() {
     token.value = null
     user.value = null
@@ -50,5 +59,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('pulsehr_user')
   }
 
-  return { user, token, loading, isAuthenticated, isHR, roleLabel, requestOtp, verifyOtp, restoreSession, logout }
+  return { user, token, loading, isAuthenticated, isHR, roleLabel, needsConsent, requestOtp, verifyOtp, restoreSession, giveConsent, logout }
 })

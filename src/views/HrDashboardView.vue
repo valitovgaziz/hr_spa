@@ -52,28 +52,26 @@ const activeSurveys = computed(() => surveys.value.filter(s => s.status === 'act
           <div class="metric-number">{{ analytics.eNPS }}</div>
           <div class="metric-label">Общий eNPS</div>
           <div :class="['metric-change', analytics.eNPSChange >= 0 ? 'positive' : 'negative']">
-            {{ analytics.eNPSChange >= 0 ? '▲' : '▼' }} {{ analytics.eNPSChange }} пунктов
+            {{ analytics.eNPSChange >= 0 ? '▲' : '▼' }} {{ Math.abs(analytics.eNPSChange) }} пунктов
           </div>
           <div style="font-size:12px;color:#6B7280;margin-top:4px;">Промоутеры {{ analytics.promoters }}%</div>
         </div>
         <div class="metric-card">
           <div class="metric-number">{{ analytics.completionRate }}%</div>
           <div class="metric-label">Прохождение опросов</div>
-          <div class="metric-change" :class="analytics.completionRate >= analytics.completionTarget ? 'positive' : 'negative'">
-            цель {{ analytics.completionTarget }}%
-          </div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-number">{{ analytics.webPushRate }}%</div>
-          <div class="metric-label">Web Push принято</div>
-          <div class="metric-change" :class="analytics.webPushRate >= analytics.webPushTarget ? 'positive' : 'negative'">
-            ≥{{ analytics.webPushTarget }}% целевой
-          </div>
+          <div class="metric-change positive">Цель 80%</div>
         </div>
         <div class="metric-card">
           <div class="metric-number">{{ analytics.avgResponseTime }} мин</div>
           <div class="metric-label">Среднее время до ответа</div>
-          <div class="metric-change positive">🔽 {{ analytics.avgResponseChange }}%</div>
+          <div :class="['metric-change', analytics.avgResponseChange <= 0 ? 'positive' : 'negative']">
+            {{ analytics.avgResponseChange <= 0 ? '🔽' : '🔼' }} {{ Math.abs(analytics.avgResponseChange) }}%
+          </div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-number">{{ analytics.responseRate24h }}%</div>
+          <div class="metric-label">Ответили за 24ч</div>
+          <div class="metric-change positive">от всех ответов</div>
         </div>
       </div>
 
@@ -98,16 +96,14 @@ const activeSurveys = computed(() => surveys.value.filter(s => s.status === 'act
         </div>
 
         <div class="card">
-          <h3 style="margin-bottom:16px;">📡 Эффективность каналов</h3>
+          <h3 style="margin-bottom:16px;">📡 Доставка уведомлений</h3>
           <div v-for="ch in analytics.channels" :key="ch.name" class="channel-row">
             <span>{{ ch.name }}</span>
             <span style="font-size:13px;">
-              CTR {{ ch.ctr }}% • доставка {{ ch.delivery }}%
+              доставка {{ ch.delivery }}% • всего {{ ch.total }}
+              <span v-if="ch.failed > 0" style="color:#EF4444;">• {{ ch.failed }} ошибок</span>
               <span v-if="ch.cost" style="color:#6B7280;">• {{ ch.cost }}₽</span>
             </span>
-          </div>
-          <div class="badge" style="margin-top:12px;">
-            📉 Снижение расходов на SMS за счёт Web Push — экономия ~42%
           </div>
         </div>
       </div>

@@ -3,6 +3,7 @@ import { useAuthStore } from '../stores/auth.js'
 
 const routes = [
   { path: '/login', name: 'Login', component: () => import('../views/LoginView.vue'), meta: { guest: true } },
+  { path: '/consent', name: 'Consent', component: () => import('../views/ConsentView.vue'), meta: { requiresAuth: true, requiresConsent: false } },
   { path: '/', redirect: '/login' },
   { path: '/hr/dashboard', name: 'HrDashboard', component: () => import('../views/HrDashboardView.vue'), meta: { requiresAuth: true, hrOnly: true } },
   { path: '/hr/surveys', name: 'SurveyList', component: () => import('../views/SurveyListView.vue'), meta: { requiresAuth: true, hrOnly: true } },
@@ -23,15 +24,27 @@ const router = createRouter({
 
 router.beforeEach((to, from, next) => {
   const auth = useAuthStore()
+
+  // Требуется авторизация
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return next('/login')
   }
+
+  // Уже авторизован — не на логин
   if (to.meta.guest && auth.isAuthenticated) {
     return next(auth.isHR ? '/hr/dashboard' : '/surveys')
   }
+
+  // Требуется согласие 152-ФЗ (кроме самого /consent)
+  if (to.name !== 'Consent' && !to.meta.guest && auth.needsConsent) {
+    return next('/consent')
+  }
+
+  // Только HR
   if (to.meta.hrOnly && !auth.isHR) {
     return next('/surveys')
   }
+
   next()
 })
 

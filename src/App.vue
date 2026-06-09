@@ -44,10 +44,16 @@ async function subscribeToPush() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   try {
     auth.restoreSession()
     if (auth.isAuthenticated) {
+      // Обновляем данные пользователя с сервера (согласие 152-ФЗ и пр.)
+      try {
+        const fresh = await api.fetchMe()
+        auth.user.value = fresh
+        localStorage.setItem('pulsehr_user', JSON.stringify(fresh))
+      } catch {}
       const target = auth.isHR ? '/hr/dashboard' : '/surveys'
       if (route.path === '/login' || route.path === '/') router.push(target)
       // Предложение подписаться на push (если ещё нет)
