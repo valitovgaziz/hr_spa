@@ -16,6 +16,12 @@ router.post('/otp', async (req, res) => {
     const phone = normalizePhone(req.body.phone)
     if (!phone) return res.status(400).json({ error: 'Телефон обязателен' })
 
+    // Только существующие пользователи могут войти
+    const existing = await pool.query('SELECT id FROM users WHERE phone = $1', [phone])
+    if (existing.rowCount === 0) {
+      return res.status(403).json({ error: 'Пользователь не найден. Обратитесь к HR для регистрации.' })
+    }
+
     const code = TEST_CODE // в продакшене — генерация + SMS
     await pool.query(
       'INSERT INTO otp_codes (phone, code) VALUES ($1, $2)',
@@ -49,20 +55,13 @@ router.post('/verify', async (req, res) => {
       [phone, code]
     )
 
-    // Ищем или создаём пользователя
-    let user = await pool.query('SELECT * FROM users WHERE phone = $1', [phone])
-    if (user.rowCount === 0) {
-      const isHr = phone === '+79991234567'
-      const result = await pool.query(
-        `INSERT INTO users (phone, name, role, department, position)
-         VALUES ($1, '', $2, '', '')
-         RETURNING id, phone, name, role, department, position`,
-        [phone, isHr ? 'hr' : 'employee']
-      )
-      user = result
+    // Только существующие пользователи могут войти
+    const result = await pool.query('SELECT * FROM users WHERE phone = $1', [phone])
+    if (result.rowCount === 0) {
+      return res.status(403).json({ error: 'Пользователь не найден. Обратитесь к HR для регистрации.' })
     }
 
-    const u = user.rows[0]
+    const u = result.rows[0]
     const token = jwt.sign({ userId: u.id, role: u.role }, JWT_SECRET, { expiresIn: '30d' })
 
     await pool.query(
