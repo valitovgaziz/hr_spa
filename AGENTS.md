@@ -35,7 +35,6 @@ Root and server each have their own `package.json`. Both need `npm install`.
 - Docker entrypoint auto-runs `db/init.js` (creates DB + schema + seeds test users).
 
 ## Known gaps (from `IMPRUVE.md`)
-- Survey store (`src/stores/survey.js`) has `createSurvey`/`publishSurvey`/`submitResponse` but **no `updateSurvey`** — only in `api.js`.
 - Excel/CSV export: button in UI, handler missing.
 - SMS provider integration not implemented.
 - Telegram bot for in-chat surveys not implemented.

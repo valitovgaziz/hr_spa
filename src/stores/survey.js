@@ -37,6 +37,18 @@ export const useSurveyStore = defineStore('survey', () => {
     }
   }
 
+  async function updateSurvey(id, data) {
+    loading.value = true
+    try {
+      const result = await api.updateSurvey(id, data)
+      const idx = surveys.value.findIndex(s => s.id === Number(id))
+      if (idx !== -1) surveys.value[idx] = { ...surveys.value[idx], ...data }
+      return result
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function publishSurvey(id) {
     const s = surveys.value.find(s => s.id === id)
     if (s) s.status = 'active'
@@ -52,5 +64,5 @@ export const useSurveyStore = defineStore('survey', () => {
     }
   }
 
-  return { surveys, currentSurvey, loading, submitting, loadSurveys, loadSurvey, createSurvey, publishSurvey, submitResponse }
+  return { surveys, currentSurvey, loading, submitting, loadSurveys, loadSurvey, createSurvey, updateSurvey, publishSurvey, submitResponse }
 })

@@ -144,7 +144,7 @@ router.post('/', authMiddleware, hrOnly, async (req, res) => {
 router.put('/:id', authMiddleware, hrOnly, async (req, res) => {
   const client = await pool.connect()
   try {
-    const { title, description, startDate, endDate, anonymous, isCritical, questions } = req.body
+    const { title, description, startDate, endDate, anonymous, isCritical, targetRoles, questions } = req.body
 
     await client.query('BEGIN')
 
@@ -155,6 +155,16 @@ router.put('/:id', authMiddleware, hrOnly, async (req, res) => {
     )
 
     await client.query('DELETE FROM survey_questions WHERE survey_id = $1', [req.params.id])
+
+    await client.query('DELETE FROM survey_targets WHERE survey_id = $1', [req.params.id])
+    if (targetRoles?.length) {
+      for (const role of targetRoles) {
+        await client.query(
+          'INSERT INTO survey_targets (survey_id, target_role) VALUES ($1, $2)',
+          [req.params.id, role]
+        )
+      }
+    }
 
     const idMap = {}
     if (questions?.length) {

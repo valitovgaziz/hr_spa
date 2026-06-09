@@ -156,7 +156,9 @@ async function publish() {
   saving.value = true
   try {
     let id = route.params.id
-    if (!isEdit.value) {
+    if (isEdit.value) {
+      await store.updateSurvey(route.params.id, survey.value)
+    } else {
       survey.value.status = 'draft'
       const result = await store.createSurvey(survey.value)
       id = result.id
