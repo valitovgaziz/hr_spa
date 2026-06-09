@@ -20,6 +20,19 @@ window.onerror = (msg, url, line, col, err) => {
   return false
 }
 
+// Перехват ошибок загрузки динамических чанков — обновляем SW и перезагружаем
+window.addEventListener('unhandledrejection', event => {
+  if (event.reason?.message?.includes('dynamically imported module') || event.reason?.message?.includes('Failed to fetch')) {
+    event.preventDefault()
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration().then(reg => {
+        if (reg) reg.unregister()
+      })
+    }
+    window.location.reload()
+  }
+})
+
 function showToast(message, type = 'info') {
   clearTimeout(toastTimer)
   toast.value = { message, type }
@@ -47,6 +60,19 @@ async function subscribeToPush() {
 }
 
 onMounted(async () => {
+  // Принудительное обновление Service Worker (чистим старый кеш)
+  if ('serviceWorker' in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration()
+      if (reg) {
+        await reg.update()
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' })
+        }
+      }
+    } catch {}
+  }
+
   try {
     auth.restoreSession()
     if (auth.isAuthenticated) {

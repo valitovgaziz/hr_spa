@@ -1,20 +1,15 @@
-const CACHE = 'pulsehr-v1'
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icon-192.svg',
-  '/icon-512.svg'
-]
+const CACHE = 'pulsehr-v2'
 
-// Установка — кешируем статику
+// Установка — пропускаем ожидание, не кешируем index.html (всегда свежий с сервера)
 self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE).then(cache => {
-      return cache.addAll(STATIC_ASSETS)
-    })
-  )
   self.skipWaiting()
+})
+
+// Слушаем команду от страницы на принудительную активацию
+self.addEventListener('message', event => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting()
+  }
 })
 
 // Активация — чистим старые кеши
@@ -27,7 +22,7 @@ self.addEventListener('activate', event => {
   return self.clients.claim()
 })
 
-// Fetch — Cache-first для статики, Network-first для API
+// Fetch — Network-first для навигации, Cache-first для статики
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url)
 
@@ -36,31 +31,30 @@ self.addEventListener('fetch', event => {
     return
   }
 
-  // Навигационные запросы (SPA) — cache-first с fallback на сеть
+  // Навигационные запросы (SPA) — network-first, fallback на кеш
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      caches.match('/index.html').then(cached => {
-        return cached || fetch(event.request).catch(() => cached)
-      })
+      fetch(event.request).then(response => {
+        return caches.open(CACHE).then(cache => {
+          cache.put('/index.html', response.clone())
+          return response
+        })
+      }).catch(() => caches.match('/index.html'))
     )
     return
   }
 
-  // Статика (JS, CSS, fonts, images) — cache-first
+  // Статика (JS, CSS, fonts, images) — network-first, fallback на кеш
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      return cached || fetch(event.request).then(response => {
-        // Кешируем только успешные ответы со статикой
-        if (response && response.ok && url.origin === self.location.origin) {
-          const clone = response.clone()
-          caches.open(CACHE).then(cache => cache.put(event.request, clone))
-        }
-        return response
-      }).catch(() => {
-        // Если сеть недоступна — пытаемся отдать из кеша
-        return caches.match('/index.html')
-      })
-    })
+    fetch(event.request).then(response => {
+      if (response && response.ok && url.origin === self.location.origin) {
+        const clone = response.clone()
+        caches.open(CACHE).then(cache => cache.put(event.request, clone))
+      }
+      return response
+    }).catch(() => caches.match(event.request).then(cached => {
+      return cached || caches.match('/index.html')
+    }))
   )
 })
 
