@@ -87,10 +87,11 @@ router.post('/telegram/link', authMiddleware, async (req, res) => {
 router.post('/push/subscribe', authMiddleware, async (req, res) => {
   try {
     const { deviceName, endpoint, p256dh, auth } = req.body
+    // Удаляем старую подписку с таким же endpoint, затем вставляем новую
+    await pool.query('DELETE FROM user_devices WHERE user_id = $1 AND push_endpoint = $2', [req.user.id, endpoint])
     await pool.query(
       `INSERT INTO user_devices (user_id, name, push_endpoint, push_p256dh, push_auth)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT DO NOTHING`,
+       VALUES ($1, $2, $3, $4, $5)`,
       [req.user.id, deviceName || 'Браузер', endpoint, p256dh, auth]
     )
     res.json({ success: true })

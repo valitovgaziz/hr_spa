@@ -123,8 +123,27 @@ export const api = {
     return request('/notifications/telegram/link', { method: 'POST' })
   },
 
-  async requestPushPermission() {
-    return { granted: true }
+  async fetchVapidKey() {
+    const data = await request('/push/vapid-key')
+    return data.publicKey
+  },
+
+  async subscribePush(subscription) {
+    function bufToBase64(buf) {
+      const bytes = new Uint8Array(buf)
+      let bin = ''
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
+      return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    }
+    return request('/notifications/push/subscribe', {
+      method: 'POST',
+      body: JSON.stringify({
+        endpoint: subscription.endpoint,
+        p256dh: bufToBase64(subscription.getKey('p256dh')),
+        auth: bufToBase64(subscription.getKey('auth')),
+        deviceName: navigator.userAgent.slice(0, 100)
+      })
+    })
   },
 
   async deleteDevice(id) {

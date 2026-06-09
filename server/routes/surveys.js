@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import pool from '../db/pool.js'
 import { authMiddleware, hrOnly } from '../middleware/auth.js'
+import { triggerCascade } from '../services/notifier.js'
 
 function toCamel(row) {
   if (!row || typeof row !== 'object') return row
@@ -203,6 +204,10 @@ router.post('/:id/publish', authMiddleware, hrOnly, async (req, res) => {
       `UPDATE surveys SET status = 'active', updated_at = NOW()
        WHERE id = $1 AND created_by = $2`,
       [req.params.id, req.user.id]
+    )
+    // Запуск каскадной доставки уведомлений
+    triggerCascade(Number(req.params.id)).catch(err =>
+      console.error('[SURVEYS] cascade error:', err)
     )
     res.json({ success: true, message: 'Опрос опубликован. Уведомления отправлены целевой аудитории.' })
   } catch (err) {

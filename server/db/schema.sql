@@ -105,6 +105,32 @@ CREATE TABLE IF NOT EXISTS survey_answers (
   value TEXT
 );
 
+-- Журнал отправки уведомлений
+CREATE TABLE IF NOT EXISTS notification_log (
+  id SERIAL PRIMARY KEY,
+  survey_id INTEGER NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  channel VARCHAR(20) NOT NULL CHECK (channel IN ('push', 'telegram', 'sms', 'email')),
+  status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'delivered', 'failed', 'skipped')),
+  sent_at TIMESTAMPTZ,
+  delivered_at TIMESTAMPTZ,
+  cost NUMERIC(10,2) DEFAULT 0,
+  error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Очередь каскадной доставки
+CREATE TABLE IF NOT EXISTS notification_queue (
+  id SERIAL PRIMARY KEY,
+  survey_id INTEGER NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  channel VARCHAR(20) NOT NULL,
+  priority INTEGER NOT NULL DEFAULT 1,
+  scheduled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  sent BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Таблица дедупликации (не нарушает анонимность survey_responses)
 CREATE TABLE IF NOT EXISTS survey_completions (
   id SERIAL PRIMARY KEY,
@@ -120,6 +146,9 @@ SELECT survey_id, user_id, submitted_at FROM survey_responses WHERE user_id IS N
 ON CONFLICT DO NOTHING;
 
 -- Индексы
+CREATE INDEX IF NOT EXISTS idx_notif_log_survey ON notification_log(survey_id);
+CREATE INDEX IF NOT EXISTS idx_notif_log_user ON notification_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_notif_queue_scheduled ON notification_queue(scheduled_at) WHERE sent = false;
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_surveys_status ON surveys(status);
@@ -142,3 +171,28 @@ CREATE TABLE IF NOT EXISTS survey_completions (
 INSERT INTO survey_completions (survey_id, user_id, completed_at)
 SELECT survey_id, user_id, submitted_at FROM survey_responses WHERE user_id IS NOT NULL
 ON CONFLICT DO NOTHING;
+CREATE TABLE IF NOT EXISTS notification_log (
+  id SERIAL PRIMARY KEY,
+  survey_id INTEGER NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  channel VARCHAR(20) NOT NULL CHECK (channel IN ('push', 'telegram', 'sms', 'email')),
+  status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'delivered', 'failed', 'skipped')),
+  sent_at TIMESTAMPTZ,
+  delivered_at TIMESTAMPTZ,
+  cost NUMERIC(10,2) DEFAULT 0,
+  error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS notification_queue (
+  id SERIAL PRIMARY KEY,
+  survey_id INTEGER NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  channel VARCHAR(20) NOT NULL,
+  priority INTEGER NOT NULL DEFAULT 1,
+  scheduled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  sent BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_notif_log_survey ON notification_log(survey_id);
+CREATE INDEX IF NOT EXISTS idx_notif_log_user ON notification_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_notif_queue_scheduled ON notification_queue(scheduled_at) WHERE sent = false;

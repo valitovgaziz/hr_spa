@@ -2,12 +2,14 @@
 import { onMounted, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from './stores/auth.js'
+import { api } from './services/api.js'
 
 const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 const toast = ref(null)
 const appError = ref(null)
+const showPushPrompt = ref(false)
 let toastTimer = null
 
 const originalOnError = window.onerror
@@ -27,17 +29,47 @@ function handleLogout() {
   router.push('/login')
 }
 
+async function subscribeToPush() {
+  try {
+    const publicKey = await api.fetchVapidKey()
+    const registration = await navigator.serviceWorker.register('/sw.js')
+    await navigator.serviceWorker.ready
+    const sub = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: publicKey
+    })
+    await api.subscribePush(sub)
+  } catch (err) {
+    console.warn('[PUSH] Subscription failed:', err)
+  }
+}
+
 onMounted(() => {
   try {
     auth.restoreSession()
     if (auth.isAuthenticated) {
       const target = auth.isHR ? '/hr/dashboard' : '/surveys'
       if (route.path === '/login' || route.path === '/') router.push(target)
+      // Предложение подписаться на push (если ещё нет)
+      if ('Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window) {
+        if (Notification.permission === 'default') {
+          showPushPrompt.value = true
+        } else if (Notification.permission === 'granted') {
+          subscribeToPush()
+        }
+      }
     }
   } catch (e) {
     console.error('App onMounted error:', e)
   }
 })
+
+function enablePush() {
+  showPushPrompt.value = false
+  Notification.requestPermission().then(perm => {
+    if (perm === 'granted') subscribeToPush()
+  })
+}
 
 const navLinks = [
   { path: '/hr/dashboard', label: 'Дашборд', hrOnly: true },
@@ -50,6 +82,19 @@ const navLinks = [
 </script>
 
 <template>
+  <!-- Push permission prompt -->
+  <div v-if="showPushPrompt" class="push-prompt-overlay" @click.self="showPushPrompt=false">
+    <div class="push-prompt-card">
+      <div class="push-prompt-icon">🔔</div>
+      <h3>Получайте уведомления о новых опросах</h3>
+      <p>Не пропустите ни один опрос — мы пришлём push-уведомление прямо в браузер.</p>
+      <div class="push-prompt-actions">
+        <button class="btn btn-primary" @click="enablePush">Включить</button>
+        <button class="btn btn-secondary" @click="showPushPrompt=false">Не сейчас</button>
+      </div>
+    </div>
+  </div>
+
   <div v-if="appError" style="background:#FEF2F2;border:2px solid #EF4444;border-radius:12px;padding:16px;margin:16px;color:#DC2626;font-size:14px;">
     <strong>⚠️ Ошибка рендеринга:</strong> {{ appError.msg }} (строка {{ appError.line }})
     <button class="btn btn-secondary" style="margin-left:12px;padding:4px 12px;font-size:12px;" @click="appError=null">✕</button>
@@ -156,6 +201,20 @@ const navLinks = [
   opacity: 0;
   transform: translateY(20px);
 }
+
+.push-prompt-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+}
+.push-prompt-card {
+  background: white; border-radius: 16px; padding: 32px;
+  max-width: 420px; text-align: center; box-shadow: 0 8px 32px rgba(0,0,0,.15);
+}
+.push-prompt-icon { font-size: 48px; margin-bottom: 12px; }
+.push-prompt-card h3 { margin-bottom: 8px; font-size: 18px; }
+.push-prompt-card p { color: #6B7280; font-size: 14px; margin-bottom: 20px; }
+.push-prompt-actions { display: flex; gap: 12px; justify-content: center; }
 
 @media (max-width: 800px) {
   .header { padding: 0 20px; }
