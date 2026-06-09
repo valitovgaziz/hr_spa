@@ -214,54 +214,57 @@ export async function triggerCascade(surveyId) {
 
 // Создать напоминания (48h / 24h) для всех непрошедших опрос, у которых подходит дедлайн
 export async function checkDeadlines() {
-  const now = new Date()
-
   // Опросы, заканчивающиеся через 46–50 часов (окно, чтобы не дублировать записи)
   const soon48 = await pool.query(
     `SELECT id, title, end_date FROM surveys
-     WHERE published = true
+     WHERE status = 'active'
        AND end_date BETWEEN NOW() + INTERVAL '46 hours' AND NOW() + INTERVAL '50 hours'`
   )
   // Опросы, заканчивающиеся через 22–26 часов
   const soon24 = await pool.query(
     `SELECT id, title, end_date FROM surveys
-     WHERE published = true
+     WHERE status = 'active'
        AND end_date BETWEEN NOW() + INTERVAL '22 hours' AND NOW() + INTERVAL '26 hours'`
   )
 
-  for (const survey of [...soon48.rows, ...soon24.rows]) {
-    const is48 = survey.end_date - now > 24 * 60 * 60 * 1000
-    const label = is48 ? '48h' : '24h'
+  // soon48 → priority=5, soon24 → priority=6
+  for (const survey of soon48.rows) {
+    await scheduleDeadlineReminders(survey.id, 5)
+  }
+  for (const survey of soon24.rows) {
+    await scheduleDeadlineReminders(survey.id, 6)
+  }
+}
 
-    // Непрошедшие пользователи
-    const users = await pool.query(
-      `SELECT id FROM users WHERE id != ALL(
-         SELECT user_id FROM survey_completions WHERE survey_id = $1
-       )`,
-      [survey.id]
+async function scheduleDeadlineReminders(surveyId, priority) {
+  // Непрошедшие пользователи
+  const users = await pool.query(
+    `SELECT id FROM users WHERE id != ALL(
+       SELECT user_id FROM survey_completions WHERE survey_id = $1
+     )`,
+    [surveyId]
+  )
+
+  for (const u of users.rows) {
+    // Проверяем, нет ли уже такой записи в очереди
+    const existing = await pool.query(
+      `SELECT id FROM notification_queue
+       WHERE survey_id = $1 AND user_id = $2 AND channel = 'push'
+         AND sent = false AND scheduled_at >= NOW() - INTERVAL '1 hour'
+         AND scheduled_at <= NOW() + INTERVAL '1 hour'`,
+      [surveyId, u.id]
     )
+    if (existing.rowCount > 0) continue
 
-    for (const u of users.rows) {
-      // Проверяем, нет ли уже такой записи в очереди
-      const existing = await pool.query(
-        `SELECT id FROM notification_queue
-         WHERE survey_id = $1 AND user_id = $2 AND channel = 'push'
-           AND sent = false AND scheduled_at >= NOW() - INTERVAL '1 hour'
-           AND scheduled_at <= NOW() + INTERVAL '1 hour'`,
-        [survey.id, u.id]
-      )
-      if (existing.rowCount > 0) continue
-
-      await pool.query(
-        `INSERT INTO notification_queue (survey_id, user_id, channel, priority, scheduled_at)
-         VALUES ($1, $2, 'push', $3, NOW())`,
-        [survey.id, u.id, is48 ? 5 : 6]
-      )
-    }
+    await pool.query(
+      `INSERT INTO notification_queue (survey_id, user_id, channel, priority, scheduled_at)
+       VALUES ($1, $2, 'push', $3, NOW())`,
+      [surveyId, u.id, priority]
+    )
   }
 
-  const total = soon48.rowCount + soon24.rowCount
-  if (total > 0) console.log(`[DEADLINES] Checked: ${total} surveys with approaching deadlines`)
+  const label = priority === 5 ? '48h' : '24h'
+  console.log(`[DEADLINES] ${label} reminders queued for survey ${surveyId}, ${users.rowCount} users`)
 }
 
 // Обработать просроченные элементы очереди

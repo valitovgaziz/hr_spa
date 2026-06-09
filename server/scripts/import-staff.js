@@ -36,7 +36,9 @@ export async function importStaff() {
     if (!phone) continue
 
     const name = (cols[nameIdx] || '').trim() || ''
-    const role = (cols[roleIdx] || '').trim().toLowerCase() || 'employee'
+    let role = (cols[roleIdx] || '').trim().toLowerCase() || 'employee'
+    // Маппинг некорректных ролей
+    if (!['hr', 'employee'].includes(role)) role = 'employee'
     const department = (cols[deptIdx] || '').trim() || ''
     const position = (cols[posIdx] || '').trim() || ''
 
