@@ -83,12 +83,15 @@ const activeSurveys = computed(() => surveys.value.filter(s => s.status === 'act
           </div>
           <div v-for="s in activeSurveys" :key="s.id" class="channel-row" style="cursor:pointer;" @click="router.push('/hr/surveys/' + s.id + '/edit')">
             <div>
-              <strong>{{ s.title }}</strong>
+              <strong>{{ s.title }} <span v-if="s.isCritical" style="color:#EF4444;">🔴</span></strong>
               <div style="font-size:12px;color:#6B7280;">
                 {{ s.responseCount }}/{{ s.targetCount }} ответов • до {{ s.endDate }}
               </div>
             </div>
-            <div class="badge badge-green">Активен</div>
+            <div style="display:flex;gap:6px;">
+              <span v-if="s.isCritical" class="badge" style="background:#EF4444;color:white;">Критичный</span>
+              <div class="badge badge-green">Активен</div>
+            </div>
           </div>
           <button class="btn btn-secondary" style="margin-top:16px;width:100%;" @click="router.push('/hr/surveys')">
             Все опросы →

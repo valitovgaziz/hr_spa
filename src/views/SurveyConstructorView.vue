@@ -18,6 +18,7 @@ const survey = ref({
   startDate: '',
   endDate: '',
   anonymous: true,
+  isCritical: false,
   targetRoles: ['employee'],
   status: 'draft',
   questions: []
@@ -224,6 +225,10 @@ const availableBranchQuestions = computed(() => {
               <option value="manager">Руководители</option>
             </select>
           </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="criticalToggle" v-model="survey.isCritical" style="width:18px;height:18px;" />
+            <label for="criticalToggle" style="font-weight:600;font-size:14px;cursor:pointer;">🔴 Критичный опрос</label>
+          </div>
         </div>
 
         <div v-if="survey.anonymous" class="alert alert-info">
@@ -231,6 +236,9 @@ const availableBranchQuestions = computed(() => {
         </div>
         <div v-else class="alert alert-warning">
           🔓 Идентифицированный режим: ответы будут видны HR с указанием имени.
+        </div>
+        <div v-if="survey.isCritical" class="alert alert-danger" style="margin-top:8px;">
+          🔴 Критичный опрос: уведомления будут доставлены принудительно по всем каналам, независимо от настроек сотрудников.
         </div>
       </div>
 

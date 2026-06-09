@@ -77,15 +77,15 @@ router.get('/:id', authMiddleware, async (req, res) => {
 router.post('/', authMiddleware, hrOnly, async (req, res) => {
   const client = await pool.connect()
   try {
-    const { title, description, startDate, endDate, anonymous, targetRoles, questions } = req.body
+    const { title, description, startDate, endDate, anonymous, isCritical, targetRoles, questions } = req.body
 
     await client.query('BEGIN')
 
     const survey = await client.query(
-      `INSERT INTO surveys (title, description, start_date, end_date, anonymous, status, created_by)
-       VALUES ($1, $2, $3, $4, $5, 'draft', $6)
+      `INSERT INTO surveys (title, description, start_date, end_date, anonymous, is_critical, status, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, 'draft', $7)
        RETURNING *`,
-      [title, description || null, startDate, endDate, anonymous, req.user.id]
+      [title, description || null, startDate, endDate, anonymous, isCritical ?? false, req.user.id]
     )
 
     const surveyId = survey.rows[0].id
@@ -144,14 +144,14 @@ router.post('/', authMiddleware, hrOnly, async (req, res) => {
 router.put('/:id', authMiddleware, hrOnly, async (req, res) => {
   const client = await pool.connect()
   try {
-    const { title, description, startDate, endDate, anonymous, questions } = req.body
+    const { title, description, startDate, endDate, anonymous, isCritical, questions } = req.body
 
     await client.query('BEGIN')
 
     await client.query(
       `UPDATE surveys SET title = $1, description = $2, start_date = $3, end_date = $4,
-       anonymous = $5, updated_at = NOW() WHERE id = $6 AND created_by = $7`,
-      [title, description, startDate, endDate, anonymous, req.params.id, req.user.id]
+       anonymous = $5, is_critical = $6, updated_at = NOW() WHERE id = $7 AND created_by = $8`,
+      [title, description, startDate, endDate, anonymous, isCritical ?? false, req.params.id, req.user.id]
     )
 
     await client.query('DELETE FROM survey_questions WHERE survey_id = $1', [req.params.id])

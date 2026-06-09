@@ -76,6 +76,7 @@ function getStatuses() {
         <div class="flex-between">
           <h3 style="font-weight:700;">{{ s.title }}</h3>
           <span :class="['badge', statusBadge(s).cls]">{{ statusBadge(s).label }}</span>
+          <span v-if="s.isCritical" class="badge" style="background:#EF4444;color:white;">🔴 Критичный</span>
         </div>
         <p v-if="s.description" style="color:#6B7280;font-size:14px;margin:8px 0;">{{ s.description }}</p>
         <div style="font-size:13px;color:#6B7280;margin-top:12px;">

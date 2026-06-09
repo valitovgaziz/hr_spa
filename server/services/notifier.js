@@ -90,9 +90,20 @@ async function dispatch(surveyId, userId, channel, title, body, surveyUrl) {
 }
 
 // Запланировать каскад для одного пользователя
-async function scheduleCascade(surveyId, userId, surveyTitle, endDate) {
+async function scheduleCascade(surveyId, userId, surveyTitle, endDate, isCritical) {
   const surveyUrl = `${APP_URL}/surveys/${surveyId}/take`
   const body = `До окончания — ${endDate}. Время прохождения — ~2 мин.`
+
+  if (isCritical) {
+    // Критичные опросы — все каналы сразу, приоритет 0 (самый высокий)
+    // Без ожидания — доставка гарантируется всеми доступными каналами
+    await enqueue(surveyId, userId, 'push', 0, 'now')
+    await enqueue(surveyId, userId, 'sms', 0, 'now')
+    await enqueue(surveyId, userId, 'email', 0, 'now')
+    await enqueue(surveyId, userId, 'telegram', 0, 'now')
+    await log('info', `Critical cascade scheduled for user ${userId}, survey ${surveyId}`)
+    return
+  }
 
   // 1. Push — сразу
   await enqueue(surveyId, userId, 'push', 1, 'now')
@@ -130,12 +141,12 @@ async function scheduleCascade(surveyId, userId, surveyTitle, endDate) {
 // Обработать одну запись очереди
 async function processQueueItem(item) {
   const survey = await pool.query(
-    'SELECT title, end_date FROM surveys WHERE id = $1',
+    'SELECT title, end_date, is_critical FROM surveys WHERE id = $1',
     [item.survey_id]
   )
   if (survey.rowCount === 0) return
 
-  const { title, end_date } = survey.rows[0]
+  const { title, end_date, is_critical } = survey.rows[0]
   const surveyUrl = `${APP_URL}/surveys/${item.survey_id}/take`
 
   let body
@@ -143,6 +154,8 @@ async function processQueueItem(item) {
     body = `Опрос «${title}» закроется через 48 часов. Пройдите сейчас — осталось мало времени!`
   } else if (item.priority === 6) {
     body = `Опрос «${title}» закрывается завтра. Последний шанс пройти!`
+  } else if (is_critical) {
+    body = `🔴 Критичный опрос «${title}». Требуется ваше участие!`
   } else {
     body = `До окончания — ${end_date}. Время прохождения — ~2 мин.`
   }
@@ -158,30 +171,32 @@ async function processQueueItem(item) {
     return
   }
 
-  // Проверяем настройки пользователя
-  const user = await pool.query(
-    `SELECT push_enabled, telegram_linked, sms_enabled, email_enabled
-     FROM users WHERE id = $1`,
-    [item.user_id]
-  )
-  if (user.rowCount === 0) return
-  const prefs = user.rows[0]
+  if (!is_critical) {
+    // Проверяем настройки пользователя (только для некритичных опросов)
+    const user = await pool.query(
+      `SELECT push_enabled, telegram_linked, sms_enabled, email_enabled
+       FROM users WHERE id = $1`,
+      [item.user_id]
+    )
+    if (user.rowCount === 0) return
+    const prefs = user.rows[0]
 
-  // Пропускаем, если канал отключён
-  if ((item.channel === 'push' && !prefs.push_enabled) ||
-      (item.channel === 'telegram' && !prefs.telegram_linked) ||
-      (item.channel === 'sms' && !prefs.sms_enabled) ||
-      (item.channel === 'email' && !prefs.email_enabled)) {
-    await pool.query('UPDATE notification_queue SET sent = true WHERE id = $1', [item.id])
-    await logSkipped(item.survey_id, item.user_id, item.channel, 'channel_disabled')
-    return
-  }
+    // Пропускаем, если канал отключён
+    if ((item.channel === 'push' && !prefs.push_enabled) ||
+        (item.channel === 'telegram' && !prefs.telegram_linked) ||
+        (item.channel === 'sms' && !prefs.sms_enabled) ||
+        (item.channel === 'email' && !prefs.email_enabled)) {
+      await pool.query('UPDATE notification_queue SET sent = true WHERE id = $1', [item.id])
+      await logSkipped(item.survey_id, item.user_id, item.channel, 'channel_disabled')
+      return
+    }
 
-  // Анти-спам: дневной лимит отправок
-  if (await dailyLimitReached(item.user_id)) {
-    await pool.query('UPDATE notification_queue SET sent = true WHERE id = $1', [item.id])
-    await logSkipped(item.survey_id, item.user_id, item.channel, 'daily_limit')
-    return
+    // Анти-спам: дневной лимит отправок
+    if (await dailyLimitReached(item.user_id)) {
+      await pool.query('UPDATE notification_queue SET sent = true WHERE id = $1', [item.id])
+      await logSkipped(item.survey_id, item.user_id, item.channel, 'daily_limit')
+      return
+    }
   }
 
   await dispatch(item.survey_id, item.user_id, item.channel, title, body, surveyUrl)
@@ -191,7 +206,7 @@ async function processQueueItem(item) {
 // Запустить каскад для всей целевой аудитории опроса
 export async function triggerCascade(surveyId) {
   const survey = await pool.query(
-    `SELECT s.title, s.end_date, s.anonymous, st.target_role
+    `SELECT s.title, s.end_date, s.is_critical, s.anonymous, st.target_role
      FROM surveys s
      LEFT JOIN survey_targets st ON st.survey_id = s.id
      WHERE s.id = $1`,
@@ -201,6 +216,7 @@ export async function triggerCascade(surveyId) {
 
   const title = survey.rows[0].title
   const endDate = survey.rows[0].end_date
+  const isCritical = survey.rows[0].is_critical
 
   // Собираем целевую аудиторию
   const targetRoles = [...new Set(survey.rows.map(r => r.target_role).filter(Boolean))]
@@ -222,7 +238,7 @@ export async function triggerCascade(surveyId) {
   }
 
   for (const u of users.rows) {
-    await scheduleCascade(surveyId, u.id, title, endDate)
+    await scheduleCascade(surveyId, u.id, title, endDate, isCritical)
   }
 
   await log('info', `Cascade triggered for survey ${surveyId}, ${users.rowCount} users`)
