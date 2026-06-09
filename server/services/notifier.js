@@ -5,9 +5,51 @@ import { sendSms } from './sms.js'
 import { sendEmail } from './email.js'
 
 const APP_URL = process.env.APP_URL || 'http://localhost:8080'
+const DAILY_LIMIT = Number(process.env.NOTIFY_DAILY_LIMIT) || 5
 
 async function log(level, msg) {
   console.log(`[NOTIFIER] ${msg}`)
+}
+
+async function enqueue(surveyId, userId, channel, priority, scheduledAt) {
+  const existing = await pool.query(
+    `SELECT id FROM notification_queue
+     WHERE survey_id = $1 AND user_id = $2 AND channel = $3 AND priority = $4 AND sent = false`,
+    [surveyId, userId, channel, priority]
+  )
+  if (existing.rowCount > 0) return
+  if (scheduledAt === 'now') {
+    await pool.query(
+      `INSERT INTO notification_queue (survey_id, user_id, channel, priority, scheduled_at)
+       VALUES ($1, $2, $3, $4, NOW())`,
+      [surveyId, userId, channel, priority]
+    )
+  } else {
+    await pool.query(
+      `INSERT INTO notification_queue (survey_id, user_id, channel, priority, scheduled_at)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [surveyId, userId, channel, priority, scheduledAt]
+    )
+  }
+}
+
+async function logSkipped(surveyId, userId, channel, reason) {
+  await pool.query(
+    `INSERT INTO notification_log (survey_id, user_id, channel, status, sent_at, error)
+     VALUES ($1, $2, $3, 'skipped', NOW(), $4)`,
+    [surveyId, userId, channel, reason]
+  )
+}
+
+async function dailyLimitReached(userId) {
+  const result = await pool.query(
+    `SELECT COUNT(*)::int AS cnt FROM notification_log
+     WHERE user_id = $1
+       AND status IN ('sent', 'delivered')
+       AND sent_at >= NOW() - INTERVAL '24 hours'`,
+    [userId]
+  )
+  return result.rows[0].cnt >= DAILY_LIMIT
 }
 
 // Отправить уведомление по конкретному каналу и записать в лог
@@ -53,57 +95,32 @@ async function scheduleCascade(surveyId, userId, surveyTitle, endDate) {
   const body = `До окончания — ${endDate}. Время прохождения — ~2 мин.`
 
   // 1. Push — сразу
-  await pool.query(
-    `INSERT INTO notification_queue (survey_id, user_id, channel, priority, scheduled_at)
-     VALUES ($1, $2, 'push', 1, NOW())`,
-    [surveyId, userId]
-  )
+  await enqueue(surveyId, userId, 'push', 1, 'now')
 
-  // 2. Telegram — через 4 часа (если push не доставлен)
-  await pool.query(
-    `INSERT INTO notification_queue (survey_id, user_id, channel, priority, scheduled_at)
-     VALUES ($1, $2, 'telegram', 2, NOW() + INTERVAL '4 hours')`,
-    [surveyId, userId]
-  )
+  // 2. Telegram — через 4 часа
+  const telTime = new Date(Date.now() + 4 * 60 * 60 * 1000)
+  await enqueue(surveyId, userId, 'telegram', 2, telTime.toISOString())
 
   // 3. SMS — через 8 часов
-  await pool.query(
-    `INSERT INTO notification_queue (survey_id, user_id, channel, priority, scheduled_at)
-     VALUES ($1, $2, 'sms', 3, NOW() + INTERVAL '8 hours')`,
-    [surveyId, userId]
-  )
+  const smsTime = new Date(Date.now() + 8 * 60 * 60 * 1000)
+  await enqueue(surveyId, userId, 'sms', 3, smsTime.toISOString())
 
-  // 4. Email — если опрос длится > 7 дней, напоминание на 7-й день
+  // 4-6. Зависит от endDate
   if (endDate) {
     const days = Math.ceil((new Date(endDate) - new Date()) / (1000 * 60 * 60 * 24))
     if (days > 7) {
-      await pool.query(
-        `INSERT INTO notification_queue (survey_id, user_id, channel, priority, scheduled_at)
-         VALUES ($1, $2, 'email', 4, NOW() + INTERVAL '7 days')`,
-        [surveyId, userId]
-      )
+      const emailTime = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      await enqueue(surveyId, userId, 'email', 4, emailTime.toISOString())
     }
-
-    // 5. Напоминание за 48 часов до дедлайна
     if (days > 2) {
       const remind48 = new Date(endDate)
       remind48.setDate(remind48.getDate() - 2)
-      await pool.query(
-        `INSERT INTO notification_queue (survey_id, user_id, channel, priority, scheduled_at)
-         VALUES ($1, $2, 'push', 5, $3)`,
-        [surveyId, userId, remind48.toISOString()]
-      )
+      await enqueue(surveyId, userId, 'push', 5, remind48.toISOString())
     }
-
-    // 6. Финальное напоминание за 24 часа до дедлайна
     if (days > 1) {
       const remind24 = new Date(endDate)
       remind24.setDate(remind24.getDate() - 1)
-      await pool.query(
-        `INSERT INTO notification_queue (survey_id, user_id, channel, priority, scheduled_at)
-         VALUES ($1, $2, 'push', 6, $3)`,
-        [surveyId, userId, remind24.toISOString()]
-      )
+      await enqueue(surveyId, userId, 'push', 6, remind24.toISOString())
     }
   }
 
@@ -137,11 +154,7 @@ async function processQueueItem(item) {
   )
   if (completed.rowCount > 0) {
     await pool.query('UPDATE notification_queue SET sent = true WHERE id = $1', [item.id])
-    await pool.query(
-      `INSERT INTO notification_log (survey_id, user_id, channel, status, sent_at)
-       VALUES ($1, $2, $3, 'skipped', NOW())`,
-      [item.survey_id, item.user_id, item.channel]
-    )
+    await logSkipped(item.survey_id, item.user_id, item.channel, 'already_completed')
     return
   }
 
@@ -160,11 +173,14 @@ async function processQueueItem(item) {
       (item.channel === 'sms' && !prefs.sms_enabled) ||
       (item.channel === 'email' && !prefs.email_enabled)) {
     await pool.query('UPDATE notification_queue SET sent = true WHERE id = $1', [item.id])
-    await pool.query(
-      `INSERT INTO notification_log (survey_id, user_id, channel, status, sent_at)
-       VALUES ($1, $2, $3, 'skipped', NOW())`,
-      [item.survey_id, item.user_id, item.channel]
-    )
+    await logSkipped(item.survey_id, item.user_id, item.channel, 'channel_disabled')
+    return
+  }
+
+  // Анти-спам: дневной лимит отправок
+  if (await dailyLimitReached(item.user_id)) {
+    await pool.query('UPDATE notification_queue SET sent = true WHERE id = $1', [item.id])
+    await logSkipped(item.survey_id, item.user_id, item.channel, 'daily_limit')
     return
   }
 
@@ -214,7 +230,7 @@ export async function triggerCascade(surveyId) {
 
 // Создать напоминания (48h / 24h) для всех непрошедших опрос, у которых подходит дедлайн
 export async function checkDeadlines() {
-  // Опросы, заканчивающиеся через 46–50 часов (окно, чтобы не дублировать записи)
+  // Опросы, заканчивающиеся через 46–50 часов
   const soon48 = await pool.query(
     `SELECT id, title, end_date FROM surveys
      WHERE status = 'active'
@@ -227,7 +243,6 @@ export async function checkDeadlines() {
        AND end_date BETWEEN NOW() + INTERVAL '22 hours' AND NOW() + INTERVAL '26 hours'`
   )
 
-  // soon48 → priority=5, soon24 → priority=6
   for (const survey of soon48.rows) {
     await scheduleDeadlineReminders(survey.id, 5)
   }
@@ -246,21 +261,7 @@ async function scheduleDeadlineReminders(surveyId, priority) {
   )
 
   for (const u of users.rows) {
-    // Проверяем, нет ли уже такой записи в очереди
-    const existing = await pool.query(
-      `SELECT id FROM notification_queue
-       WHERE survey_id = $1 AND user_id = $2 AND channel = 'push'
-         AND sent = false AND scheduled_at >= NOW() - INTERVAL '1 hour'
-         AND scheduled_at <= NOW() + INTERVAL '1 hour'`,
-      [surveyId, u.id]
-    )
-    if (existing.rowCount > 0) continue
-
-    await pool.query(
-      `INSERT INTO notification_queue (survey_id, user_id, channel, priority, scheduled_at)
-       VALUES ($1, $2, 'push', $3, NOW())`,
-      [surveyId, u.id, priority]
-    )
+    await enqueue(surveyId, u.id, 'push', priority, 'now')
   }
 
   const label = priority === 5 ? '48h' : '24h'
