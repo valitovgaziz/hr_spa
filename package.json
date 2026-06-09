@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "generate:icons": "node scripts/generate-pwa-icons.js",
+    "build": "node scripts/generate-pwa-icons.js && vite build",
     "preview": "vite preview",
     "serve": "npx http-server dist -p 8080 -c-1 --cors",
     "clean": "npx rimraf dist"

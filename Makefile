@@ -1,4 +1,4 @@
-.PHONY: dev dev-front dev-back install install-back install-front build clean
+.PHONY: dev dev-front dev-back install install-back install-front build clean docker-build docker-up docker-down
 
 # Запустить всё (фронт + бэк)
 dev: dev-back dev-front
@@ -27,6 +27,21 @@ build:
 # Инициализировать БД
 db-init:
 	cd server && npm run db:init
+
+# Docker
+docker-build:
+	docker compose build
+
+docker-up:
+	docker compose up -d
+
+docker-down:
+	docker compose down
+
+docker-logs:
+	docker compose logs -f
+
+docker-restart: docker-down docker-up
 
 # Очистить
 clean:

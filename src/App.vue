@@ -10,6 +10,8 @@ const route = useRoute()
 const toast = ref(null)
 const appError = ref(null)
 const showPushPrompt = ref(false)
+const showInstallPrompt = ref(false)
+let deferredPrompt = null
 let toastTimer = null
 
 const originalOnError = window.onerror
@@ -70,6 +72,27 @@ onMounted(async () => {
   }
 })
 
+// Слушаем beforeinstallprompt
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault()
+  deferredPrompt = e
+  showInstallPrompt.value = true
+})
+
+window.addEventListener('appinstalled', () => {
+  showInstallPrompt.value = false
+  deferredPrompt = null
+})
+
+function installApp() {
+  if (!deferredPrompt) return
+  deferredPrompt.prompt()
+  deferredPrompt.userChoice.then(result => {
+    if (result.outcome === 'accepted') showInstallPrompt.value = false
+    deferredPrompt = null
+  })
+}
+
 function enablePush() {
   showPushPrompt.value = false
   Notification.requestPermission().then(perm => {
@@ -98,6 +121,19 @@ const navLinks = [
         <button class="btn btn-primary" @click="enablePush">Включить</button>
         <button class="btn btn-secondary" @click="showPushPrompt=false">Не сейчас</button>
       </div>
+    </div>
+  </div>
+
+  <!-- PWA install banner -->
+  <div v-if="showInstallPrompt" class="install-banner">
+    <div class="install-banner-inner">
+      <div class="install-banner-icon">📊</div>
+      <div class="install-banner-text">
+        <strong>Установите PulseHR</strong>
+        <span>на рабочий стол для быстрого доступа</span>
+      </div>
+      <button class="btn btn-primary" style="white-space:nowrap;" @click="installApp">Установить</button>
+      <button class="btn btn-secondary" style="white-space:nowrap;" @click="showInstallPrompt=false">✕</button>
     </div>
   </div>
 
@@ -221,6 +257,43 @@ const navLinks = [
 .push-prompt-card h3 { margin-bottom: 8px; font-size: 18px; }
 .push-prompt-card p { color: #6B7280; font-size: 14px; margin-bottom: 20px; }
 .push-prompt-actions { display: flex; gap: 12px; justify-content: center; }
+
+.install-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  border-top: 1px solid #E2E8F0;
+  box-shadow: 0 -4px 16px rgba(0,0,0,.08);
+  z-index: 100;
+  padding: 12px 16px;
+}
+.install-banner-inner {
+  max-width: 800px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.install-banner-icon {
+  font-size: 32px;
+  width: 48px;
+  height: 48px;
+  background: #EFF6FF;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.install-banner-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  font-size: 14px;
+}
+.install-banner-text strong { font-size: 15px; }
+.install-banner-text span { color: #6B7280; font-size: 13px; }
 
 @media (max-width: 800px) {
   .header { padding: 0 20px; }
