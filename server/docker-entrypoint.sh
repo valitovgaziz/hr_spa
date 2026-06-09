@@ -8,7 +8,7 @@ until pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" 2>/dev/
 done
 echo "[ENTRYPOINT] PostgreSQL is ready"
 
-# Инициализируем БД (схема + seed)
+# Инициализируем БД (схема + базовые пользователи + демо-данные)
 echo "[ENTRYPOINT] Running DB init..."
 node db/init.js
 

@@ -61,7 +61,17 @@ async function init() {
   }
 
   await db.end()
-  console.log('[DB] Initialization complete')
+  console.log('[DB] Base initialization complete')
+
+  // Демо-данные (опросы, ответы, уведомления)
+  console.log('[DB] Running seed data…')
+  const { execSync } = await import('child_process')
+  try {
+    execSync('node db/seed.js', { stdio: 'inherit' })
+    console.log('[DB] Seed data applied')
+  } catch (e) {
+    console.warn('[DB] Seed data skipped (already exists or error):', e.message)
+  }
 }
 
 init().catch(err => {

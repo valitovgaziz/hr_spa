@@ -2,7 +2,7 @@ FROM node:22-alpine
 WORKDIR /app
 
 # Устанавливаем зависимости для сборки (если потребуется)
-RUN apk add --no-cache tzdata
+RUN apk add --no-cache tzdata postgresql-client
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
